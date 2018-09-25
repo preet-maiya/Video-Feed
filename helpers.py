@@ -9,35 +9,35 @@ import numpy as np
 
 class VideoGrabber(Thread):
     def __init__(self, jpeg_quality):
-            Thread.__init__(self)
-            self.encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_quality]
-            self.cap = cv2.VideoCapture(0)
-            self.running = True
-            self.buffer = None
-            self.lock = Lock()
+        Thread.__init__(self)
+        self.encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_quality]
+        self.cap = cv2.VideoCapture(0)
+        self.running = True
+        self.buffer = None
+        self.lock = Lock()
 
     def stop(self):
-            self.running = False
+        self.running = False
 
     def set_quality(self, jpeg_quality):
-            self.encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_quality]
+        self.encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_quality]
 
     def get_buffer(self):
-            if self.buffer is not None:
-                    self.lock.acquire()
-                    cpy = self.buffer.copy()
-                    self.lock.release()
-                    return cpy
+        if self.buffer is not None:
+                self.lock.acquire()
+                cpy = self.buffer.copy()
+                self.lock.release()
+                return cpy
             
     def run(self):
-            while self.running:
-                    success, img = self.cap.read()
-                    if not success:
-                            continue
-                    
-                    self.lock.acquire()
-                    result, self.buffer = cv2.imencode('.jpg', img, self.encode_param)
-                    self.lock.release()
+        while self.running:
+                success, img = self.cap.read()
+                if not success:
+                        continue
+                
+                self.lock.acquire()
+                _, self.buffer = cv2.imencode('.jpg', img, self.encode_param)
+                self.lock.release()
 
 
 class SendVideo:
@@ -45,6 +45,8 @@ class SendVideo:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((host, port))
         self.operation = ""
+        self.seq = -1
+        self.max_seq = 1000
 
     def startTransfer(self):
         print("Starting transfer...")
@@ -52,31 +54,32 @@ class SendVideo:
         print(self.operation)
 
     def send(self, data):
-        
-        if self.operation == "get":
+        if self.operation == "get" or True:
             header = ''
             len_data = len(data)
             remaining = len_data
-            offset = 65490
+            offset = 65000
             frag_no = 0
-            # Remaining space after timestamp and one byte to indicate if more
-            while((remaining - 65490) > 0):
+            self.seq = (self.seq+1) % self.max_seq
+            sequence = "%3d"%self.seq
+            print(sequence)
+            # Remaining space after timestamp and one byte to indicate if more comes to be 65490
+            while((remaining - offset) > 0):
                 ts = "%.5f"%time.time()
                 more = '1'
-                header = ts + more
+                header = sequence + ts + more
                 frag_data = data[frag_no*offset: (frag_no+1)*offset]
                 frag_no += 1
                 frag_data = header + frag_data
                 self.sock.sendto(frag_data, self.address)
+                remaining -= offset
 
             more = '0'
             ts = "%.5f"%time.time()
-            header = ts + more
-            frag_data = data[frag_no*offset: (frag_no+1)*offset]
-            frag_no += 1
+            header = sequence + ts + more
+            frag_data = data[frag_no*offset:]
             frag_data = header + frag_data
             self.sock.sendto(frag_data, self.address)
-
 
 class ReceiveVideo(Thread):
     def __init__(self, server, port):
@@ -89,6 +92,7 @@ class ReceiveVideo(Thread):
         self.running = True
         self.delay = []
         self.delay_start = time.time()
+        self.prev_seq = 0
 
     def setOperation(self, operation="get"):
         server_address = (self.server, self.port)
@@ -103,20 +107,29 @@ class ReceiveVideo(Thread):
 
     def run(self):
         while(self.running):
-            more, data = self.revc_data()
+            seq, more, data = self.revc_data()
+            corrupt = 0
             while(more):
-                print("more to come...")
-                more, tmp = self.revc_data()
-                data += tmp
+                seq_frag, more, tmp = self.revc_data()
+                if seq == seq_frag:
+                    data += tmp
+                else:
+                    corrupt = 1
+                    break
+            
+            # TODO: Dirty fix for corrupted image. CORRECT THIS!!!
+            if corrupt:
+                continue
 
             array = np.frombuffer(data, dtype=np.dtype('uint8'))
+            print("{}\t{}".format(self.prev_seq, seq))
             img = cv2.imdecode(array, 1)
 
-            #TODO: Handle multiple packets with acks
-
-            self.lock.acquire()
-            self.buffer = img
-            self.lock.release()
+            # TODO: Handle multiple packets with timers
+            if(type(img) == np.ndarray):
+                self.lock.acquire()
+                self.buffer = img
+                self.lock.release()
 
     def handle_delay(self, delay):
         self.delay.append(delay)
@@ -133,18 +146,21 @@ class ReceiveVideo(Thread):
         return ret_val
 
     def revc_data(self):
-        data, server = self.sock.recvfrom(65507)
+        data, _ = self.sock.recvfrom(65020)
         ts = time.time()
         if len(data) == 4:
             if(data == "FAIL"):
                 return None
 
-        ts_recv = float(data[:16])
+        header = data[:20]
+        data = data[20:]
+
+        seq = int(header[:3])
+
+        ts_recv = float(header[3:19])
         delay = ts - ts_recv
         self.handle_delay(delay)
 
-        more = int(data[16])
-
-        data = data[17:]
+        more = int(header[19])
         
-        return (more, data)
+        return (seq, more, data)
