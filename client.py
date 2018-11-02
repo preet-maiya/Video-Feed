@@ -4,7 +4,7 @@ import numpy as np
 import sys
 import time
 from helpers import ReceiveVideo
-
+# from client_gui import Controller
 
 if(len(sys.argv) != 3):
     print("Usage : {} hostname port".format(sys.argv[0]))

@@ -49,6 +49,8 @@ class SendVideo:
         self.max_seq = 1000
 
     def startTransfer(self):
+        
+        #TODO: Move this to a separate thread so the operation can be continued after stopping client
         print("Starting transfer...")
         self.operation, self.address = self.sock.recvfrom(10)
         print(self.operation)
@@ -62,7 +64,7 @@ class SendVideo:
             frag_no = 0
             self.seq = (self.seq+1) % self.max_seq
             sequence = "%3d"%self.seq
-            print(sequence)
+            # print(sequence)
             # Remaining space after timestamp and one byte to indicate if more comes to be 65490
             while((remaining - offset) > 0):
                 ts = "%.5f"%time.time()
@@ -93,6 +95,7 @@ class ReceiveVideo(Thread):
         self.delay = []
         self.delay_start = time.time()
         self.prev_seq = 0
+        self.end_chars = b'\xff\xd9'
 
     def setOperation(self, operation="get"):
         server_address = (self.server, self.port)
@@ -118,11 +121,14 @@ class ReceiveVideo(Thread):
                     break
             
             # TODO: Dirty fix for corrupted image. CORRECT THIS!!!
-            if corrupt:
+
+            end_chars = data[-2:]
+
+            if end_chars != self.end_chars or corrupt:
                 continue
 
             array = np.frombuffer(data, dtype=np.dtype('uint8'))
-            print("{}\t{}".format(self.prev_seq, seq))
+            # print("{}\t{}".format(self.prev_seq, seq))
             img = cv2.imdecode(array, 1)
 
             # TODO: Handle multiple packets with timers
@@ -164,3 +170,14 @@ class ReceiveVideo(Thread):
         more = int(header[19])
         
         return (seq, more, data)
+
+class SendCommands:
+    def __init__(self, host, port):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind((host, port))
+        self.host = host
+        self.port = port
+        self.server_address = (host, int(port))
+
+    def sendCommand(self, msg):
+        self.sock.sendto(msg, self.server_address)
