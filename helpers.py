@@ -6,6 +6,8 @@ import sys
 import time
 import numpy as np
 
+from time import sleep
+
 
 class VideoGrabber(Thread):
     def __init__(self, jpeg_quality):
@@ -48,12 +50,20 @@ class SendVideo:
         self.seq = -1
         self.max_seq = 1000
 
+    def get_client_address(self):
+        while(1):
+            self.operation, self.address = self.sock.recvfrom(10)
+            print("Client address :{}".format(self.address))
+            print(self.operation)
+
     def startTransfer(self):
         
         #TODO: Move this to a separate thread so the operation can be continued after stopping client
-        print("Starting transfer...")
-        self.operation, self.address = self.sock.recvfrom(10)
-        print(self.operation)
+        address_thread = Thread(target=self.get_client_address)
+        address_thread.start()
+        print("Started a thread for getting client address.")
+        sleep(5)
+        print(self.address)        
 
     def send(self, data):
         if self.operation == "get" or True:
@@ -131,7 +141,6 @@ class ReceiveVideo(Thread):
             # print("{}\t{}".format(self.prev_seq, seq))
             img = cv2.imdecode(array, 1)
 
-            # TODO: Handle multiple packets with timers
             if(type(img) == np.ndarray):
                 self.lock.acquire()
                 self.buffer = img
