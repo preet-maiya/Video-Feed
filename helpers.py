@@ -45,7 +45,7 @@ class VideoGrabber(Thread):
 class SendVideo:
     def __init__(self, host, port):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind((host, port))
+        self.sock.bind((host, int(port)))
         self.operation = ""
         self.seq = -1
         self.max_seq = 1000
@@ -58,11 +58,11 @@ class SendVideo:
 
     def startTransfer(self):
         
-        #TODO: Move this to a separate thread so the operation can be continued after stopping client
+        #TODO: Dirty fix for the first connection. Correct this.
+        self.operation, self.address = self.sock.recvfrom(10)
         address_thread = Thread(target=self.get_client_address)
         address_thread.start()
         print("Started a thread for getting client address.")
-        sleep(5)
         print(self.address)        
 
     def send(self, data):
@@ -182,11 +182,23 @@ class ReceiveVideo(Thread):
 
 class SendCommands:
     def __init__(self, host, port):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind((host, port))
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.host = host
-        self.port = port
-        self.server_address = (host, int(port))
+        self.port = int(port)
+        self.sock.connect((self.host, self.port))
 
     def sendCommand(self, msg):
-        self.sock.sendto(msg, self.server_address)
+        self.sock.send(msg)
+
+class GetCommands:
+    def __init__(self, host, port):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.port = int(port)
+        self.sock.bind((host, self.port))
+        self.sock.listen(5)
+
+    def handle_client_connection(self, client_socket):
+        while True :
+            self.message = client_socket.recv(1024)
+            print(self.message)
+

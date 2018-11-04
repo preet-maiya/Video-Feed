@@ -2,14 +2,16 @@ import Tkinter
 import tkMessageBox
 from Tkinter import E, Frame, Canvas, PhotoImage, NW, S
 import PIL.ImageTk
-from helpers import ReceiveVideo
+from helpers import ReceiveVideo, SendCommands
 import cv2
 import numpy as np
 
 
 class Controller:
-    def __init__(self, root, host, video_port):
+    def __init__(self, root, host, video_port, command_port):
         self.receiver = ReceiveVideo(host, video_port)
+        self.sendCommands = SendCommands(host, command_port)
+        
         self.receiver.start()
         self.receiver.setOperation()
 
@@ -51,22 +53,19 @@ class Controller:
 
     def upFunc(self, event=None):
         print("Up")
+        self.sendCommands.sendCommand("up")
 
     def downFunc(self, event=None):
         print("Down")
+        self.sendCommands.sendCommand("down")
 
     def leftFunc(self, event=None):
         print("Left")
+        self.sendCommands.sendCommand("left")
 
     def rightFunc(self, Event=None):
         print("Right")
-
-    def bgr2rgb(self, data):
-        for row in data:
-            for col in row:
-                col[0], col[2] = col[2], col[0]
-
-        return data
+        self.sendCommands.sendCommand("right")
 
     def startVideo(self):
         frame = self.receiver.get_frame()
@@ -78,6 +77,6 @@ class Controller:
 
 
 root = Tkinter.Tk()
-controller = Controller(root, '127.0.0.1', "1080") 
-# controller.startVideo()  
-# Tkinter.mainloop()    
+controller = Controller(root, '127.0.0.1', "1080", "1000") 
+controller.startVideo()  
+Tkinter.mainloop()    
