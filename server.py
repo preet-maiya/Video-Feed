@@ -1,4 +1,4 @@
-from helpers import VideoGrabber, SendVideo, GetCommands
+from Server import SendVideo, GetCommands
 
 
 video_quality = 60
