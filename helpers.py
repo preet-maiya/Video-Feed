@@ -6,8 +6,6 @@ import sys
 import time
 import numpy as np
 
-from time import sleep
-
 
 class VideoGrabber(Thread):
     def __init__(self, jpeg_quality):
@@ -17,6 +15,7 @@ class VideoGrabber(Thread):
         self.running = True
         self.buffer = None
         self.lock = Lock()
+        self.buffer = cv2.imread("default.png")
 
     def stop(self):
         self.running = False
@@ -42,13 +41,15 @@ class VideoGrabber(Thread):
                 self.lock.release()
 
 
-class SendVideo:
-    def __init__(self, host, port):
+class SendVideo(Thread):
+    def __init__(self, host, port, jpeg_quality):
+        Thread.__init__(self)        
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((host, int(port)))
         self.operation = ""
         self.seq = -1
         self.max_seq = 1000
+        self.grabber = VideoGrabber(jpeg_quality)
 
     def get_client_address(self):
         while(1):
@@ -63,9 +64,14 @@ class SendVideo:
         address_thread = Thread(target=self.get_client_address)
         address_thread.start()
         print("Started a thread for getting client address.")
-        print(self.address)        
+        print(self.address)
+        
+        self.running = True
 
-    def send(self, data):
+        print("Started camera.")
+        self.grabber.start()
+
+    def sendFrame(self, data):
         if self.operation == "get" or True:
             header = ''
             len_data = len(data)
@@ -74,7 +80,7 @@ class SendVideo:
             frag_no = 0
             self.seq = (self.seq+1) % self.max_seq
             sequence = "%3d"%self.seq
-            # print(sequence)
+
             # Remaining space after timestamp and one byte to indicate if more comes to be 65490
             while((remaining - offset) > 0):
                 ts = "%.5f"%time.time()
@@ -92,6 +98,16 @@ class SendVideo:
             frag_data = data[frag_no*offset:]
             frag_data = header + frag_data
             self.sock.sendto(frag_data, self.address)
+
+    def run(self):
+        self.startTransfer()
+        while self.running:
+            buffer = self.grabber.get_buffer()
+            data = buffer.tobytes()
+            self.sendFrame(data)
+
+
+    
 
 class ReceiveVideo(Thread):
     def __init__(self, server, port):
@@ -117,7 +133,6 @@ class ReceiveVideo(Thread):
         self.lock.release()
         return copy
         
-
     def run(self):
         while(self.running):
             seq, more, data = self.revc_data()
@@ -138,7 +153,7 @@ class ReceiveVideo(Thread):
                 continue
 
             array = np.frombuffer(data, dtype=np.dtype('uint8'))
-            # print("{}\t{}".format(self.prev_seq, seq))
+
             img = cv2.imdecode(array, 1)
 
             if(type(img) == np.ndarray):
@@ -190,15 +205,29 @@ class SendCommands:
     def sendCommand(self, msg):
         self.sock.send(msg)
 
-class GetCommands:
+class GetCommands(Thread):
     def __init__(self, host, port):
+        Thread.__init__(self)        
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.port = int(port)
         self.sock.bind((host, self.port))
         self.sock.listen(5)
 
-    def handle_client_connection(self, client_socket):
+    def get_client_connection(self):
+        while(True):
+            self.client_sock, self.client_addr = self.sock.accept()
+            print("New client {}".format(self.client_addr))
+
+    def set_client(self):
+        print("Waiting for client connection...")
+        self.client_sock, self.client_addr = self.sock.accept()
+        client_connection_thread = Thread(target=self.get_client_connection)
+        client_connection_thread.start()
+        print("Started client connection thread.")
+
+    def run(self):
+        self.set_client()
         while True :
-            self.message = client_socket.recv(1024)
+            self.message = self.client_sock.recv(1024)
             print(self.message)
 
