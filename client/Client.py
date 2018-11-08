@@ -1,6 +1,6 @@
 import Tkinter
 import tkMessageBox
-from Tkinter import E, Frame, Canvas, PhotoImage, NW, S, Scale, HORIZONTAL
+from Tkinter import E, Frame, Canvas, PhotoImage, NW, S, Scale, HORIZONTAL, W, LEFT, RIGHT
 import PIL.ImageTk
 import cv2
 import numpy as np
@@ -102,6 +102,12 @@ class ReceiveVideo(Thread):
         self.sock.sendto(data, self.server_address)
         print("Changed quality to {}".format(quality))
 
+    def update_auto_mode(self, auto):
+        auto = str(auto)
+        data = "2" + auto
+        self.sock.sendto(data, self.server_address)
+        print("Updated auto mode to {}".format(bool(int(auto))))
+
 class SendCommands:
     def __init__(self, host, port):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -135,20 +141,31 @@ class Controller:
         self.quality = 50
         self.step = 5
         self.scale = Scale(self.controls, variable=self.quality, orient=HORIZONTAL, length=200)
+        self.scale.set(self.quality)
         self.scale.bind("<ButtonRelease-1>", self.set_quality)
+        self.scale.pack(pady=30)
 
-        self.scale.pack()
         init_frame  = self.receiver.get_frame()
         l, b, _ = init_frame.shape
         self.canvas = Canvas(self.display, width = l, height = b-100)      
         self.canvas.pack()      
         self.img = PhotoImage(file="../resources/default.png")      
-        self.canvas.create_image(20,20, anchor=NW, image=self.img)      
+        self.canvas.create_image(20,20, anchor=NW, image=self.img)
             
         self.forward = Tkinter.Button(self.buttons, text ="Forward", command = self.upFunc)
         self.backward =  Tkinter.Button(self.buttons, text ="Backward", command = self.downFunc)
         self.left =  Tkinter.Button(self.buttons, text ="Left", command = self.leftFunc)
         self.right =  Tkinter.Button(self.buttons, text ="Right", command = self.rightFunc)
+
+        self.autonomous = Frame(self.controls)
+        self.autonomous.pack(pady=10)
+        self.auto_button = Tkinter.Button(self.autonomous, text="OFF", bg="Red", anchor=E, command=self.toggle_auto)
+        self.toggle = False
+        self.auto_label = Tkinter.Label(self.autonomous, text="Autonomous mode:", anchor=W)
+
+        self.auto_button.pack(side=RIGHT)
+        self.auto_label.pack(side=LEFT)
+        
 
         self.forward.grid(row=0, column=1)
         self.backward.grid(row=2, column=1)
@@ -160,9 +177,10 @@ class Controller:
         self.root.bind('<Right>', self.rightFunc)
         self.root.bind('<Left>', self.leftFunc)
 
-        self.root.geometry("500x750")
+        self.root.geometry("500x850")
        
         self.delay = 1
+
         self.startVideo()
 
         self.root.mainloop()
@@ -210,3 +228,19 @@ class Controller:
 
         print(self.quality)
         self.receiver.update_quality(quality)
+
+    def toggle_auto(self):
+        if self.toggle:
+            self.auto_button.config(bg="Red", text="OFF")
+            data = 0
+            self.receiver.update_auto_mode(data)
+        else:
+            self.auto_button.config(bg="Green", text="ON")
+            data = 1
+            self.receiver.update_auto_mode(data)
+
+        self.toggle = not self.toggle  
+
+        print(self.root.winfo_height())
+
+

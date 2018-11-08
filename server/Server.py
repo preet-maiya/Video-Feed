@@ -70,6 +70,13 @@ class SendVideo(Thread):
             print("Changed quality to {}".format(_data))
             _data = int(_data)
             self.grabber.set_quality(_data)
+
+        elif t==2:
+            print("Updated auto mode to {}".format(int(_data)))
+            # Put code to turn on/off autonomous mode
+
+        else:
+            pass
             
     def startTransfer(self):
         
