@@ -133,12 +133,14 @@ class Controller:
         self.buttons.pack()
 
         self.quality = 50
-        self.scale = Scale(self.controls, variable=self.quality, orient=HORIZONTAL)
+        self.step = 5
+        self.scale = Scale(self.controls, variable=self.quality, orient=HORIZONTAL, length=200)
         self.scale.bind("<ButtonRelease-1>", self.set_quality)
 
         self.scale.pack()
-
-        self.canvas = Canvas(self.display, width = 480, height = 640)      
+        init_frame  = self.receiver.get_frame()
+        l, b, _ = init_frame.shape
+        self.canvas = Canvas(self.display, width = l, height = b-100)      
         self.canvas.pack()      
         self.img = PhotoImage(file="default.png")      
         self.canvas.create_image(20,20, anchor=NW, image=self.img)      
@@ -190,7 +192,21 @@ class Controller:
         self.root.after(self.delay, self.startVideo)
 
     def set_quality(self, event):
-        if self.quality == self.scale.get():
-            return
+        quality = int(self.scale.get())
         print(self.scale.get())
-        self.receiver.update_quality(int(self.scale.get()))
+        mod_val = quality % self.step
+
+        if mod_val > self.step/2:
+            quality = quality + (self.step-mod_val)
+        else:
+            quality = quality - mod_val
+
+        self.scale.set(quality)
+        
+        if self.quality == quality:
+            return
+
+        self.quality = quality
+
+        print(self.quality)
+        self.receiver.update_quality(quality)
