@@ -16,7 +16,7 @@ class ReceiveVideo(Thread):
         self.server = server
         self.port = int(port)
         self.lock = Lock()
-        self.buffer = cv2.imread('default.jpg', 1)
+        self.buffer = cv2.imread("../resources/default.png", 1)
         self.running = True
         self.delay = []
         self.delay_start = time.time()
@@ -142,7 +142,7 @@ class Controller:
         l, b, _ = init_frame.shape
         self.canvas = Canvas(self.display, width = l, height = b-100)      
         self.canvas.pack()      
-        self.img = PhotoImage(file="default.png")      
+        self.img = PhotoImage(file="../resources/default.png")      
         self.canvas.create_image(20,20, anchor=NW, image=self.img)      
             
         self.forward = Tkinter.Button(self.buttons, text ="Forward", command = self.upFunc)
@@ -202,7 +202,7 @@ class Controller:
             quality = quality - mod_val
 
         self.scale.set(quality)
-        
+
         if self.quality == quality:
             return
 

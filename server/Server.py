@@ -12,7 +12,7 @@ class VideoGrabber(Thread):
         self.running = True
         self.buffer = None
         self.lock = Lock()
-        self.buffer = cv2.imread("default.png")
+        self.buffer = cv2.imread("../resources/default.png")
 
     def stop(self):
         self.running = False
