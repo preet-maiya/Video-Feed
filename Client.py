@@ -1,6 +1,6 @@
 import Tkinter
 import tkMessageBox
-from Tkinter import E, Frame, Canvas, PhotoImage, NW, S
+from Tkinter import E, Frame, Canvas, PhotoImage, NW, S, Scale, HORIZONTAL
 import PIL.ImageTk
 import cv2
 import numpy as np
@@ -22,10 +22,11 @@ class ReceiveVideo(Thread):
         self.delay_start = time.time()
         self.prev_seq = 0
         self.end_chars = b'\xff\xd9'
+        self.server_address = (self.server, self.port)
 
     def setOperation(self, operation="get"):
-        server_address = (self.server, self.port)
-        self.sock.sendto(operation, server_address)
+        data = "0" + operation
+        self.sock.sendto(data, self.server_address)
 
     def get_frame(self):
         self.lock.acquire()
@@ -95,6 +96,12 @@ class ReceiveVideo(Thread):
         
         return (seq, more, data)
 
+    def update_quality(self, quality):
+        quality = str(quality)
+        data = "1" + quality
+        self.sock.sendto(data, self.server_address)
+        print("Changed quality to {}".format(quality))
+
 class SendCommands:
     def __init__(self, host, port):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -110,17 +117,26 @@ class Controller:
     def __init__(self, root, host, video_port, command_port):
         self.receiver = ReceiveVideo(host, video_port)
         self.sendCommands = SendCommands(host, command_port)
-        
+
         self.receiver.start()
         self.receiver.setOperation()
 
         self.root = root
 
-        self.buttons = Frame(root)
-        self.buttons.pack()
-
         self.display = Frame(root)
         self.display.pack()
+
+        self.controls = Frame(root)
+        self.controls.pack()
+
+        self.buttons = Frame(self.controls)
+        self.buttons.pack()
+
+        self.quality = 50
+        self.scale = Scale(self.controls, variable=self.quality, orient=HORIZONTAL)
+        self.scale.bind("<ButtonRelease-1>", self.set_quality)
+
+        self.scale.pack()
 
         self.canvas = Canvas(self.display, width = 480, height = 640)      
         self.canvas.pack()      
@@ -142,9 +158,9 @@ class Controller:
         self.root.bind('<Right>', self.rightFunc)
         self.root.bind('<Left>', self.leftFunc)
 
-        self.root.geometry("500x500")
+        self.root.geometry("500x750")
        
-        self.delay = 50
+        self.delay = 1
         self.startVideo()
 
         self.root.mainloop()
@@ -172,3 +188,9 @@ class Controller:
         self.video_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(frame))
         self.canvas.create_image(0, 0, image=self.video_frame, anchor=NW)
         self.root.after(self.delay, self.startVideo)
+
+    def set_quality(self, event):
+        if self.quality == self.scale.get():
+            return
+        print(self.scale.get())
+        self.receiver.update_quality(int(self.scale.get()))

@@ -48,17 +48,36 @@ class SendVideo(Thread):
         self.max_seq = 1000
         self.grabber = VideoGrabber(jpeg_quality)
 
-    def get_client_address(self):
+    def get_control_data(self):
         while(1):
-            self.operation, self.address = self.sock.recvfrom(10)
+            data, address = self.sock.recvfrom(10)
+            self.handle_data((data, address))
+           
+    def handle_data(self, data):
+        _data = data[0]
+        _address = data[1]
+
+        t = int(_data[0])
+        _data = _data[1:]
+
+        if t==0:
             print("Client address :{}".format(self.address))
+            self.operation = _data
+            self.address = _address
             print(self.operation)
 
+        elif t==1:
+            print("Changed quality to {}".format(_data))
+            _data = int(_data)
+            self.grabber.set_quality(_data)
+            
     def startTransfer(self):
         
         #TODO: Dirty fix for the first connection. Correct this.
-        self.operation, self.address = self.sock.recvfrom(10)
-        address_thread = Thread(target=self.get_client_address)
+        data, self.address = self.sock.recvfrom(10)
+        self.operation = data[1:]
+
+        address_thread = Thread(target=self.get_control_data)
         address_thread.start()
         print("Started a thread for getting client address.")
         print(self.address)
