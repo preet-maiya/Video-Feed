@@ -3,3 +3,6 @@
 
 # Ignode vscode data
 .vscode/
+
+# Ignore temp files
+**/temp*

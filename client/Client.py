@@ -10,11 +10,14 @@ import time
 
 
 class ReceiveVideo(Thread):
-    def __init__(self, server, port):
+    def __init__(self, server, video_port, control_port):
         Thread.__init__(self)        
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.video_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.control_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server = server
-        self.port = int(port)
+        self.video_port = int(video_port)
+        self.control_port = int(control_port)
+
         self.lock = Lock()
         self.buffer = cv2.imread("../resources/default.png", 1)
         self.running = True
@@ -22,11 +25,20 @@ class ReceiveVideo(Thread):
         self.delay_start = time.time()
         self.prev_seq = 0
         self.end_chars = b'\xff\xd9'
-        self.server_address = (self.server, self.port)
+        self.server_address_video = (self.server, self.video_port)
+        self.server_address_control = (self.server, self.control_port)
+
+        self.control_sock.connect(self.server_address_control)
+
+        self.video_sock.bind(('', 0))
+        # self.control_sock.listen(5)
 
     def setOperation(self, operation="get"):
         data = "0" + operation
-        self.sock.sendto(data, self.server_address)
+        sock_name = str(self.video_sock.getsockname())
+        data += "~" + sock_name
+        print(data)
+        self.control_sock.send(data)
 
     def get_frame(self):
         self.lock.acquire()
@@ -77,7 +89,7 @@ class ReceiveVideo(Thread):
         return ret_val
 
     def revc_data(self):
-        data, _ = self.sock.recvfrom(65020)
+        data, _ = self.video_sock.recvfrom(65020)
         ts = time.time()
         if len(data) == 4:
             if(data == "FAIL"):
@@ -99,14 +111,22 @@ class ReceiveVideo(Thread):
     def update_quality(self, quality):
         quality = str(quality)
         data = "1" + quality
-        self.sock.sendto(data, self.server_address)
+
+        self.control_sock.send(data)
         print("Changed quality to {}".format(quality))
 
     def update_auto_mode(self, auto):
         auto = str(auto)
         data = "2" + auto
-        self.sock.sendto(data, self.server_address)
+        
+        self.control_sock.send(data)
         print("Updated auto mode to {}".format(bool(int(auto))))
+
+    def close(self):
+        data = "3close"
+        self.control_socl.send(data)
+        self.control_sock.close()
+        self.video_sock.close()
 
 class SendCommands:
     def __init__(self, host, port):
@@ -120,8 +140,8 @@ class SendCommands:
 
 
 class Controller:
-    def __init__(self, root, host, video_port, command_port):
-        self.receiver = ReceiveVideo(host, video_port)
+    def __init__(self, root, host, video_port, control_port, command_port):
+        self.receiver = ReceiveVideo(host, video_port, control_port)
         self.sendCommands = SendCommands(host, command_port)
 
         self.receiver.start()
@@ -146,8 +166,9 @@ class Controller:
         self.scale.pack(pady=30)
 
         init_frame  = self.receiver.get_frame()
+        print(init_frame.shape)
         l, b, _ = init_frame.shape
-        self.canvas = Canvas(self.display, width = l, height = b-100)      
+        self.canvas = Canvas(self.display, width = 1.8*l, height = b)      
         self.canvas.pack()      
         self.img = PhotoImage(file="../resources/default.png")      
         self.canvas.create_image(20,20, anchor=NW, image=self.img)
@@ -243,4 +264,6 @@ class Controller:
 
         print(self.root.winfo_height())
 
+    def on_close(self):
+        self.receiver.close()
 

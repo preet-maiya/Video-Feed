@@ -2,6 +2,7 @@ from threading import Thread, Lock
 import time
 import cv2
 import socket
+import ast
 
 
 class VideoGrabber(Thread):
@@ -39,32 +40,51 @@ class VideoGrabber(Thread):
 
 
 class SendVideo(Thread):
-    def __init__(self, host, port, jpeg_quality):
+    def __init__(self, host, video_port, control_port, jpeg_quality):
         Thread.__init__(self)        
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind((host, int(port)))
+        self.video_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.control_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.control_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        self.control_sock.bind((host, int(control_port)))
+        self.control_sock.listen(5)
+        
+        self.client_sock = None
         self.operation = ""
         self.seq = -1
         self.max_seq = 1000
         self.grabber = VideoGrabber(jpeg_quality)
 
+
+    def get_client_connection(self):
+        while(1):
+            self.client_sock, self.control_address = self.control_sock.accept()
+            print("Client address :{}".format(self.address))
+
+
     def get_control_data(self):
         while(1):
-            data, address = self.sock.recvfrom(10)
-            self.handle_data((data, address))
+            
+            data = self.client_sock.recv(50)
+            self.handle_data(data)
+
+    def close(self):
+        self.client_sock.close()
            
     def handle_data(self, data):
-        _data = data[0]
-        _address = data[1]
+        _data = data
 
         t = int(_data[0])
         _data = _data[1:]
 
         if t==0:
-            print("Client address :{}".format(self.address))
-            self.operation = _data
-            self.address = _address
+            ops = _data.split('~')
+            print(_data)
+            print(ops)
+            self.operation = ops[0]
+            self.address = ast.literal_eval(ops[1])
             print(self.operation)
+            print(self.address)
 
         elif t==1:
             print("Changed quality to {}".format(_data))
@@ -75,18 +95,27 @@ class SendVideo(Thread):
             print("Updated auto mode to {}".format(int(_data)))
             # Put code to turn on/off autonomous mode
 
+        elif t==3:
+            print("Closing connection {}".format(self.client_sock.getsockname()))
+            self.close()
+
         else:
             pass
             
     def startTransfer(self):
         
         #TODO: Dirty fix for the first connection. Correct this.
-        data, self.address = self.sock.recvfrom(10)
-        self.operation = data[1:]
+    
+        self.client_sock, self.address = self.control_sock.accept()
 
-        address_thread = Thread(target=self.get_control_data)
+        control_thread = Thread(target=self.get_control_data)
+        control_thread.start()
+        print("Started a thread for getting control signals.")
+
+        address_thread = Thread(target=self.get_client_connection)
         address_thread.start()
         print("Started a thread for getting client address.")
+        
         print(self.address)
         
         self.running = True
@@ -112,7 +141,7 @@ class SendVideo(Thread):
                 frag_data = data[frag_no*offset: (frag_no+1)*offset]
                 frag_no += 1
                 frag_data = header + frag_data
-                self.sock.sendto(frag_data, self.address)
+                self.video_sock.sendto(frag_data, self.address)
                 remaining -= offset
 
             more = '0'
@@ -120,7 +149,7 @@ class SendVideo(Thread):
             header = sequence + ts + more
             frag_data = data[frag_no*offset:]
             frag_data = header + frag_data
-            self.sock.sendto(frag_data, self.address)
+            self.video_sock.sendto(frag_data, self.address)
 
     def run(self):
         self.startTransfer()
